@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Command-line front end for the omaLens shell plugin — handy for key bindings.
+
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: omalens [command]
+
+  toggle    Open or close the lens (default)
+  close     Close the lens
+  zoom-in   Magnify more
+  zoom-out  Magnify less
+  size [small|medium|large]
+            Set the lens size, or cycle small → medium → large with no argument
+  bigger    Next size up (stops at large)
+  smaller   Next size down (stops at small)
+  shape     Switch between circle and square
+  smooth    Switch between smooth and sharp pixels
+USAGE
+}
+
+lens() { omarchy-shell omalens "$@" >/dev/null 2>&1 || true; }
+
+case "${1:-toggle}" in
+  toggle) omarchy-shell shell toggle jgarza.omalens '{}' ;;
+  close) omarchy-shell shell hide jgarza.omalens ;;
+  zoom-in) lens zoomIn ;;
+  zoom-out) lens zoomOut ;;
+  size)
+    case "${2:-}" in
+      "") lens cycleSize ;;
+      small | medium | large) lens setSize "$2" ;;
+      *) echo "omalens: size must be small, medium, or large" >&2; exit 1 ;;
+    esac
+    ;;
+  bigger) lens bigger ;;
+  smaller) lens smaller ;;
+  shape) lens shape ;;
+  smooth) lens smooth ;;
+  -h | --help | help) usage ;;
+  *) echo "omalens: unknown command '$1'" >&2; usage >&2; exit 1 ;;
+esac

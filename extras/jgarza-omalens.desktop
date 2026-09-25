@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=omaLens
+Comment=Magnifying glass for the screen
+Exec=sh -c 'omarchy-shell shell toggle jgarza.omalens "{}"'
+Icon=zoom-in
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=magnifier;magnify;zoom;lens;magnifying glass;

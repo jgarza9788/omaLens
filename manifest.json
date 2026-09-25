@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "jgarza.omalens",
+  "name": "omaLens",
+  "version": "0.1.0",
+  "author": "jgarza",
+  "license": "MIT",
+  "description": "A magnifying glass: freezes the focused screen and follows the pointer with a zoomable lens.",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "OmaLens.qml"
+  }
+}
