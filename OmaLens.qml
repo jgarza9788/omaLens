@@ -224,7 +224,7 @@ Item {
           root.animateMoves = false;
           root.updateQuadrant();
           root.animateMoves = true;
-          root.animateIn();
+          if (root.active) root.animateIn();
         }
       }
     }

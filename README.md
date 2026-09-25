@@ -1,5 +1,7 @@
 # omaLens
 
+![omaLens magnifying text beside the pointer](preview.png)
+
 A live magnifying glass for Omarchy. A round lens floats just beside your
 pointer and shows a magnified, live view of what's under the pointer.
 
