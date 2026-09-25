@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+"""Manage omaLens's key-binding block in a Hyprland Lua file.
+
+The block sits between a `-- >>> omaLens` line and a `-- <<< omaLens` line, so
+it can be found and replaced later.
+
+  omalens-bindings status FILE   print JSON: {"exists", "marked", "loose"}
+                                 (loose = lines mentioning omalens outside the block)
+  omalens-bindings write FILE [BLOCK]
+                                 replace the existing block with BLOCK (or stdin),
+                                 or append it. Keeps FILE.bak.
+"""
+
+import json
+import os
+import shutil
+import sys
+
+BEGIN = "-- >>> omaLens"
+END = "-- <<< omaLens"
+
+
+def block_span(lines):
+    """Index of the BEGIN and END lines, or None when there's no complete block."""
+    start = next((i for i, l in enumerate(lines) if l.strip().startswith(BEGIN)), None)
+    if start is None:
+        return None
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].strip().startswith(END)), None)
+    return None if end is None else (start, end)
+
+
+def read_lines(path):
+    try:
+        with open(path) as f:
+            return f.read().splitlines()
+    except FileNotFoundError:
+        return None
+
+
+def status(path):
+    lines = read_lines(path)
+    if lines is None:
+        return {"exists": False, "marked": False, "loose": 0}
+    span = block_span(lines)
+    inside = range(span[0], span[1] + 1) if span else range(0)
+    loose = sum(1 for i, l in enumerate(lines)
+                if i not in inside and "omalens" in l.lower() and not l.strip().startswith("--"))
+    return {"exists": True, "marked": span is not None, "loose": loose}
+
+
+def write(path, block):
+    block_lines = block.rstrip("\n").splitlines()
+    lines = read_lines(path)
+    if lines is None:
+        lines, action = block_lines, "added"
+    else:
+        shutil.copy2(path, path + ".bak")
+        span = block_span(lines)
+        if span:
+            lines = lines[:span[0]] + block_lines + lines[span[1] + 1:]
+            action = "updated"
+        else:
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines += block_lines
+            action = "added"
+    tmp = path + ".omalens-tmp"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, path)
+    return {"action": action}
+
+
+def main():
+    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("status", "write"):
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    # realpath: rewrite the target of a symlinked config (dotfiles), not the link.
+    cmd, path = sys.argv[1], os.path.realpath(os.path.expanduser(sys.argv[2]))
+    if cmd == "status":
+        result = status(path)
+    else:
+        result = write(path, sys.argv[3] if len(sys.argv) == 4 else sys.stdin.read())
+    print(json.dumps(result))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

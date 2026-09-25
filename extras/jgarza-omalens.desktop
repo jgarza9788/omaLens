@@ -7,3 +7,8 @@ Icon=zoom-in
 Terminal=false
 Categories=Utility;Accessibility;
 Keywords=magnifier;magnify;zoom;lens;magnifying glass;
+Actions=settings;
+
+[Desktop Action settings]
+Name=omaLens Settings
+Exec=omarchy-shell omalens settings

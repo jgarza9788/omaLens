@@ -23,9 +23,12 @@ import qs.Commons
 //
 // Control it over IPC (see bin/omalens):
 //   omarchy-shell omalens zoomIn | zoomOut | bigger | smaller | shape | smooth
+//   omarchy-shell omalens settings      (the settings window, LensSettings.qml)
 //
 // Summon payload (all optional): {"zoom": 3, "size": "large", "shape": "square",
-// "smooth": true}. Settings are remembered between summons.
+// "smooth": true}. A payload lasts until the lens closes and is never saved.
+// Otherwise, changes made from the settings window or the IPC verbs are saved to
+// ~/.config/omarchy/jgarza.omalens/settings.json.
 Item {
   id: root
 
@@ -173,9 +176,10 @@ Item {
   // ── Settings ────────────────────────────────────────────────────────────
   function clampZoom(z) { return Math.max(minZoom, Math.min(maxZoom, z)); }
 
+  function zoomLabel(z) { return z.toFixed(z < 10 ? 2 : 1).replace(/\.?0+$/, "") + "×"; }
   function setZoom(z) {
     root.zoom = clampZoom(z);
-    flash(root.zoom.toFixed(root.zoom < 10 ? 2 : 1).replace(/\.?0+$/, "") + "×");
+    flash(zoomLabel(root.zoom));
   }
   function setSizeIndex(i) {
     root.sizeIndex = Math.max(0, Math.min(sizes.length - 1, i));
@@ -193,15 +197,100 @@ Item {
   function flash(t) { root.hint = t; root.hintOn = true; hintTimer.restart(); }
   Timer { id: hintTimer; interval: 900; onTriggered: root.hintOn = false }
 
-  function applyPayload(payloadJson) {
-    var p = {};
-    try { p = JSON.parse(String(payloadJson || "{}")) || {}; } catch (e) {}
+  function applySettings(p) {
+    if (!p || typeof p !== "object") return;
     if (isFinite(p.zoom)) root.zoom = clampZoom(Number(p.zoom));
     if (p.size !== undefined && sizeIndexOf(p.size) >= 0) root.sizeIndex = sizeIndexOf(p.size);
     if (p.shape === "square") root.round = false;
     else if (p.shape === "circle") root.round = true;
     if (typeof p.smooth === "boolean") root.smoothPixels = p.smooth;
   }
+  // A summon payload is a one-off: it changes the lens until it closes, and
+  // is never saved. While one is in effect (`overridden`), hotkey changes are
+  // also left unsaved; closing the lens puts the saved settings back.
+  function applyPayload(payloadJson) {
+    var p = {};
+    try { p = JSON.parse(String(payloadJson || "{}")) || {}; } catch (e) {}
+    root.restoreSaved();
+    if (typeof p !== "object" || Object.keys(p).length === 0) return;
+    root.overridden = true;
+    root.restoring = true;
+    applySettings(p);
+    root.restoring = false;
+  }
+  function restoreSaved() {
+    if (!root.overridden) return;
+    root.overridden = false;
+    root.restoring = true;
+    applySettings(root.saved);
+    root.restoring = false;
+  }
+
+  // ── Saved settings ──────────────────────────────────────────────────────
+  readonly property var defaults: ({ zoom: 2.5, size: "medium", shape: "circle", smooth: false })
+  // What's in settings.json. The settings window shows and edits this.
+  property var saved: defaults
+  property bool overridden: false
+  property bool restoring: false   // applying saved/payload values: don't save
+  property bool loaded: false      // the file has been read; until then, never write it
+  readonly property string configDir: Quickshell.env("HOME") + "/.config/omarchy/" + pluginId
+
+  function currentSettings() {
+    return { zoom: root.zoom, size: root.sizes[root.sizeIndex].id,
+             shape: root.round ? "circle" : "square", smooth: root.smoothPixels };
+  }
+  // Set one saved setting (from the settings window) and show it on the lens.
+  function setSaved(key, value) {
+    var next = Object.assign({}, root.saved);
+    next[key] = key === "zoom" ? clampZoom(value) : value;
+    root.saved = next;
+    root.restoring = true;
+    var one = {};
+    one[key] = next[key];
+    applySettings(one);
+    root.restoring = false;
+    if (root.loaded) saveTimer.restart();
+  }
+  function resetSettings() {
+    for (var k in root.defaults) setSaved(k, root.defaults[k]);
+  }
+
+  Component.onCompleted: Quickshell.execDetached(["mkdir", "-p", root.configDir])
+
+  FileView {
+    id: settingsFile
+    path: root.configDir + "/settings.json"
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: {
+      var p = {};
+      try { p = JSON.parse(String(text() || "{}")) || {}; } catch (e) {}
+      root.restoring = true;
+      root.applySettings(p);
+      root.restoring = false;
+      root.saved = root.currentSettings();
+      root.loaded = true;
+    }
+    onLoadFailed: root.loaded = true
+  }
+  Timer {
+    id: saveTimer
+    interval: 400
+    onTriggered: settingsFile.setText(JSON.stringify(root.saved, null, 2) + "\n")
+  }
+  // Hotkey / IPC changes to the lens are saved, unless a payload is in effect.
+  function saveSettings() {
+    if (!root.loaded || root.restoring || root.overridden) return;
+    root.saved = root.currentSettings();
+    saveTimer.restart();
+  }
+  onZoomChanged: saveSettings()
+  onSizeIndexChanged: saveSettings()
+  onRoundChanged: saveSettings()
+  onSmoothPixelsChanged: saveSettings()
+
+  LensSettings { id: settingsWindow; lens: root }
 
   // ── Pointer tracking ────────────────────────────────────────────────────
   // bin/omalens-cursor polls Hyprland's `cursorpos` and prints "X Y" on
@@ -251,6 +340,7 @@ Item {
   }
   function finishClose() {
     root.closing = false;
+    root.restoreSaved();
     root.havePos = false;
     root.animateMoves = false;
   }
@@ -289,6 +379,10 @@ Item {
       root.round = !root.round;
       root.flash(root.round ? "circle" : "square");
       return root.round ? "circle" : "square"
+    }
+    function settings(): string {
+      settingsWindow.toggle();
+      return settingsWindow.opened ? "open" : "closed"
     }
     function smooth(): string {
       root.smoothPixels = !root.smoothPixels;

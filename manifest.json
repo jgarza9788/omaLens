@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "jgarza.omalens",
   "name": "omaLens",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "jgarza",
   "license": "MIT",
-  "description": "A magnifying glass: freezes the focused screen and follows the pointer with a zoomable lens.",
+  "description": "A live magnifying glass that floats beside the pointer, with a settings window for zoom, size, shape, and key bindings.",
   "kinds": [
     "overlay"
   ],

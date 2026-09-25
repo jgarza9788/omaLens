@@ -15,17 +15,20 @@ mkdir -p ~/.local/share/applications
 cp "$here/jgarza-omalens.desktop" ~/.local/share/applications/
 update-desktop-database ~/.local/share/applications 2>/dev/null || true
 
-# 3. Omarchy menu entry — merge one line into the user extension file.
+# 3. Omarchy menu entries — merge one line each into the user extension file.
 menu=~/.config/omarchy/extensions/omarchy-menu.jsonc
-if [[ -f $menu ]] && grep -q '"omalens"' "$menu"; then
-  echo "menu entry already present"
-else
-  mkdir -p "$(dirname "$menu")"
-  [[ -f $menu ]] || printf '{\n}\n' > "$menu"
+mkdir -p "$(dirname "$menu")"
+[[ -f $menu ]] || printf '{\n}\n' > "$menu"
+
+# add_menu_entry KEY LINE: insert LINE before the file's closing brace unless KEY is there.
+add_menu_entry() {
+  if grep -q "\"$1\"" "$menu"; then
+    echo "menu entry $1 already present"
+    return
+  fi
+  local tmp
   tmp=$(mktemp)
-  # Note the '\''{}'\'' — a literal single-quoted {} (empty JSON payload).
-  entry='  "omalens": {"icon":"󰍉","label":"omaLens","aliases":["omalens","lens","magnifier","magnify","zoom"],"description":"Magnifying glass for the screen","action":"omarchy-shell shell toggle jgarza.omalens '\''{}'\''"}'
-  awk -v e="$entry" '
+  awk -v e="$2" '
     { lines[NR]=$0 }
     END {
       last=NR; while (last>0 && lines[last] !~ /}/) last--
@@ -35,8 +38,12 @@ else
       print e
       for (i=last;i<=NR;i++) print lines[i]
     }' "$menu" > "$tmp" && mv "$tmp" "$menu"
-  echo "added omaLens to the Omarchy menu"
-fi
+  echo "added $1 to the Omarchy menu"
+}
+
+# Note the '\''{}'\'' — a literal single-quoted {} (empty JSON payload).
+add_menu_entry omalens '  "omalens": {"icon":"󰍉","label":"omaLens","aliases":["omalens","lens","magnifier","magnify","zoom"],"description":"Magnifying glass for the screen","action":"omarchy-shell shell toggle jgarza.omalens '\''{}'\''"}'
+add_menu_entry omalens-settings '  "omalens-settings": {"icon":"󰒓","label":"omaLens Settings","aliases":["omalens-settings","lens settings","magnifier settings"],"description":"Adjust the lens and set up its key bindings","action":"omarchy-shell omalens settings"}'
 
 # 4. Re-parse the menu if the shell is up.
 omarchy menu refresh >/dev/null 2>&1 || true

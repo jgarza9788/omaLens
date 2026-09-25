@@ -17,6 +17,7 @@ Usage: omalens [command]
   smaller   Next size down (stops at small)
   shape     Switch between circle and square
   smooth    Switch between smooth and sharp pixels
+  settings  Open or close the settings window
 USAGE
 }
 
@@ -38,6 +39,7 @@ case "${1:-toggle}" in
   smaller) lens smaller ;;
   shape) lens shape ;;
   smooth) lens smooth ;;
+  settings) lens settings ;;
   -h | --help | help) usage ;;
   *) echo "omalens: unknown command '$1'" >&2; usage >&2; exit 1 ;;
 esac
