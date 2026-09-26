@@ -8,13 +8,16 @@ it can be found and replaced later.
                                  (loose = lines mentioning omalens outside the block)
   omalens-bindings write FILE [BLOCK]
                                  replace the existing block with BLOCK (or stdin),
-                                 or append it. Keeps FILE.bak.
+                                 or append it. Keeps FILE.bak and FILE's
+                                 permissions.
 """
 
 import json
 import os
 import shutil
+import stat
 import sys
+import tempfile
 
 BEGIN = "-- >>> omaLens"
 END = "-- <<< omaLens"
@@ -64,10 +67,28 @@ def write(path, block):
                 lines.append("")
             lines += block_lines
             action = "added"
-    tmp = path + ".omalens-tmp"
-    with open(tmp, "w") as f:
-        f.write("\n".join(lines) + "\n")
-    os.replace(tmp, path)
+    # Keep the file's permissions (a private 0600 config must stay private);
+    # a new file gets the usual umask-derived mode.
+    try:
+        mode = stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    # mkstemp creates the temp file 0600 and exclusively; widen to the target
+    # mode before writing so the contents are never more exposed than the original.
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".omalens-", suffix=".tmp")
+    try:
+        os.fchmod(fd, mode)
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     return {"action": action}
 
 
