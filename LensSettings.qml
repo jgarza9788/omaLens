@@ -185,8 +185,8 @@ Item {
         var r = {};
         try { r = JSON.parse(String(text || "{}")); } catch (e) {}
         if (!r.action) { root.status = "Couldn't write " + root.bindingsPath; return; }
-        var msg = (r.action === "updated" ? "Updated the omaLens block in" : "Added an omaLens block to") +
-                  " bindings.lua (old copy in bindings.lua.bak).";
+        var msg = (r.action === "updated" ? "Updated the omaLens block in" : "Added an omaLens block to") + " bindings.lua" +
+                  (r.backup ? " (old copy in " + String(r.backup).split("/").pop() + ")." : ".");
         if (root.fileState.loose > 0)
           msg += " Your older hand-written omaLens lines are still there. Use Open bindings.lua to remove them.";
         root.status = msg;

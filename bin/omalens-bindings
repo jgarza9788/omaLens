@@ -8,10 +8,13 @@ it can be found and replaced later.
                                  (loose = lines mentioning omalens outside the block)
   omalens-bindings write FILE [BLOCK]
                                  replace the existing block with BLOCK (or stdin),
-                                 or append it. Keeps FILE.bak and FILE's
-                                 permissions.
+                                 or append it. Copies FILE to the first free
+                                 FILE.bak, FILE.bak.1, ... (never overwriting
+                                 one) and keeps FILE's permissions. Prints JSON:
+                                 {"action", "backup"}.
 """
 
+import itertools
 import json
 import os
 import shutil
@@ -51,13 +54,41 @@ def status(path):
     return {"exists": True, "marked": span is not None, "loose": loose}
 
 
+def backup(path):
+    """Copy path to the first free FILE.bak, FILE.bak.1, ... and return its name.
+
+    O_EXCL never follows or replaces an existing entry (a symlink included), so
+    a planted link can't redirect the copy and an earlier backup is never lost.
+    """
+    st = os.stat(path)
+    for n in itertools.count():
+        bak = path + ".bak" + (f".{n}" if n else "")
+        try:
+            fd = os.open(bak, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            continue
+        try:
+            os.fchmod(fd, stat.S_IMODE(st.st_mode))
+            with os.fdopen(fd, "wb") as dst, open(path, "rb") as src:
+                shutil.copyfileobj(src, dst)
+            os.utime(bak, ns=(st.st_atime_ns, st.st_mtime_ns))
+        except BaseException:
+            try:
+                os.unlink(bak)
+            except OSError:
+                pass
+            raise
+        return bak
+
+
 def write(path, block):
     block_lines = block.rstrip("\n").splitlines()
     lines = read_lines(path)
+    bak = None
     if lines is None:
         lines, action = block_lines, "added"
     else:
-        shutil.copy2(path, path + ".bak")
+        bak = backup(path)
         span = block_span(lines)
         if span:
             lines = lines[:span[0]] + block_lines + lines[span[1] + 1:]
@@ -89,7 +120,7 @@ def write(path, block):
         except OSError:
             pass
         raise
-    return {"action": action}
+    return {"action": action, "backup": bak}
 
 
 def main():

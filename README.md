@@ -24,8 +24,9 @@ To update later: `omarchy plugin update jgarza.omalens`.
 
 Like every Omarchy plugin, omaLens runs unsandboxed inside the shell. It runs
 `hyprctl`, `python3`, and `wl-copy`, and it writes `~/.config/hypr/bindings.lua`
-only when you press **Add** or **Update** in the settings window (keeping a
-`bindings.lua.bak`).
+only when you press **Add** or **Update** in the settings window (first copying
+it to a new `bindings.lua.bak`, `bindings.lua.bak.1`, ... — an existing backup
+is never overwritten).
 
 ## Open and close it
 
@@ -51,7 +52,8 @@ only when you press **Add** or **Update** in the settings window (keeping a
 - copy the key-binding block below, add it to `~/.config/hypr/bindings.lua`, or
   open that file in your editor. The block is marked with `-- >>> omaLens` /
   `-- <<< omaLens`, so the same button later **updates** it in place. A copy of
-  the previous file is kept as `bindings.lua.bak`.
+  the previous file is kept as the first free `bindings.lua.bak`,
+  `bindings.lua.bak.1`, ...
 
 Everything works from the keyboard. `Tab` / `Shift + Tab` move between controls.
 On the zoom slider, `←` `→` `↑` `↓` (or `h` `j` `k` `l`) step the zoom, `Page Up` /
