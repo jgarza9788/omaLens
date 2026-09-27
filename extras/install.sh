@@ -26,8 +26,12 @@ add_menu_entry() {
     echo "menu entry $1 already present"
     return
   fi
-  local tmp
-  tmp=$(mktemp)
+  # Rewrite the symlink's target (dotfiles) in place of the link, via a temp file
+  # beside it that carries the original's permissions.
+  local real tmp
+  real=$(readlink -f "$menu")
+  tmp=$(mktemp "$(dirname "$real")/.omalens-XXXXXX")
+  chmod --reference="$real" "$tmp"
   awk -v e="$2" '
     { lines[NR]=$0 }
     END {
@@ -37,7 +41,7 @@ add_menu_entry() {
       for (i=1;i<last;i++) print lines[i]
       print e
       for (i=last;i<=NR;i++) print lines[i]
-    }' "$menu" > "$tmp" && mv "$tmp" "$menu"
+    }' "$real" > "$tmp" && mv "$tmp" "$real" || { rm -f "$tmp"; return 1; }
   echo "added $1 to the Omarchy menu"
 }
 
