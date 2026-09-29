@@ -14,7 +14,8 @@ import qs.Commons
 // magnified around the pointer.
 //
 // Placement: the lens rides on a ring around the pointer, parked on one of the
-// four diagonals (below-right by default). Near a screen edge it turns around
+// four diagonals (below-right by default). A round lens only has to clear the
+// round patch it shows, so it sits closer than a square one. Near a screen edge it turns around
 // the ring to the diagonal that fits. Moving along the ring (rather than
 // straight across) keeps it clear of the area it's magnifying the whole time,
 // so it never magnifies itself. A small tail on the rim points at the pointer.
@@ -26,7 +27,7 @@ import qs.Commons
 //   omarchy-shell omalens settings      (the settings window, LensSettings.qml)
 //
 // Summon payload (all optional): {"zoom": 3, "size": "large", "shape": "square",
-// "smooth": true}. A payload lasts until the lens closes and is never saved.
+// "smooth": true, "offset": 40}. A payload lasts until the lens closes and is never saved.
 // Otherwise, changes made from the settings window or the IPC verbs are saved to
 // ~/.config/omarchy/jgarza.omalens/settings.json.
 Item {
@@ -41,6 +42,10 @@ Item {
   // ── Lens settings ────────────────────────────────────────────────────────
   readonly property real minZoom: 1.25
   readonly property real maxZoom: 24
+  // Extra space (px) between the magnified area and the lens. At 0 the rim
+  // touches the magnified area; any closer and the lens would magnify itself.
+  readonly property int minOffset: 0
+  readonly property int maxOffset: 100
   // Three lens sizes; `sizeIndex` picks one.
   readonly property var sizes: [
     { id: "small",  label: "Small",  px: 300 },
@@ -53,16 +58,19 @@ Item {
   readonly property int size: sizes[sizeIndex].px
   property bool round: true
   property bool smoothPixels: false
+  property real offset: 18
 
   // Displayed (animated) versions of the settings.
   property real dz: zoom
   property real ds: size
   property real roundness: round ? 1 : 0
+  property real doff: offset
   // Springs throughout: they settle softly and, unlike timed curves, keep
   // their velocity when retargeted mid-flight, so nothing ever snaps.
   Behavior on dz { SpringAnimation { spring: 5; damping: 0.45; epsilon: 0.001 } }
   Behavior on ds { SpringAnimation { spring: 5; damping: 0.45; epsilon: 0.25 } }
   Behavior on roundness { SpringAnimation { spring: 4; damping: 0.5; epsilon: 0.002 } }
+  Behavior on doff { SpringAnimation { spring: 5; damping: 0.45; epsilon: 0.25 } }
 
   // ── State ────────────────────────────────────────────────────────────────
   property bool active: false      // open (or opening)
@@ -71,21 +79,21 @@ Item {
   property real gx: 0              // pointer, global logical coords
   property real gy: 0
 
-  // 0 → 1 as the lens appears; back to 0 as it goes. Appearing is a soft
-  // spring (≈ 350 ms, barely any overshoot); leaving is a quicker ease-in with
-  // no bounce. Both start from the current value, so reversing mid-way is smooth.
+  // 0 → 1 as the lens appears; back to 0 as it goes. Both take 330 ms with no
+  // bounce: appearing eases out, leaving eases in and out. Both start from the
+  // current value, so reversing mid-way is smooth.
   property real shown: 0
   readonly property real shownC: Math.max(0, Math.min(1, shown))
 
-  SpringAnimation {
+  NumberAnimation {
     id: openAnim
     target: root; property: "shown"; to: 1
-    spring: 4.5; damping: 0.32; epsilon: 0.002
+    duration: 330; easing.type: Easing.OutCubic
   }
   NumberAnimation {
     id: closeAnim
     target: root; property: "shown"; to: 0
-    duration: 180; easing.type: Easing.InQuad
+    duration: 330; easing.type: Easing.InOutCubic
   }
   function animateIn() { closeAnim.stop(); openAnim.start(); }
   function animateOut() { openAnim.stop(); closeAnim.start(); }
@@ -112,12 +120,25 @@ Item {
   readonly property real cy: targetScreen ? gy - targetScreen.y : gy
 
   // ── Placement on the ring ───────────────────────────────────────────────
-  // `gap` keeps the lens clear of the sampled square (ds / dz wide, centred
-  // on the pointer). On a diagonal, the lens centre sits `reach` from the
-  // pointer along each axis, so the ring radius is reach·√2.
-  readonly property real gap: ds / (2 * dz) + 18
-  readonly property real reach: gap + ds / 2
-  readonly property real ringRadius: reach * Math.SQRT2
+  // `gap` is the space between the pointer and the nearest edge of the lens:
+  // the half-width of the patch the lens shows (ds / 2dz, centred on the
+  // pointer) plus the user's `offset`.
+  //
+  // A round lens shows a round patch, so two circles only need their centres
+  // gap + ds/2 apart, at any angle. A square lens shows a square patch, which
+  // needs that much along one axis (a square ring: farther on the diagonals).
+  // In between shapes, the two radii are blended.
+  readonly property real gap: ds / (2 * dz) + doff
+  readonly property real roundC: Math.max(0, Math.min(1, roundness))
+  function ringRadiusAt(deg) {
+    var a = deg * Math.PI / 180;
+    var circle = gap + ds / 2;
+    var square = circle / Math.max(Math.abs(Math.cos(a)), Math.abs(Math.sin(a)), 0.0001);
+    return square + (circle - square) * roundC;
+  }
+  readonly property real ringRadius: ringRadiusAt(angle)
+  // Parked on a diagonal: pointer → lens centre, per axis.
+  readonly property real reach: ringRadiusAt(45) * Math.SQRT1_2
   readonly property real edgeMargin: 8
   readonly property real edgeHysteresis: 48
 
@@ -145,7 +166,7 @@ Item {
   // (the hysteresis stops it flapping along an edge).
   function updateQuadrant() {
     if (!havePos || !targetScreen) return;
-    var far = gap + ds;            // pointer → far edge of the lens, per axis
+    var far = reach + ds / 2;      // pointer → far edge of the lens, per axis
     var m = edgeMargin, h = edgeHysteresis;
 
     var qx = quadX;
@@ -172,9 +193,12 @@ Item {
   onCyChanged: updateQuadrant()
   onDsChanged: updateQuadrant()
   onDzChanged: updateQuadrant()
+  onDoffChanged: updateQuadrant()
+  onRoundCChanged: updateQuadrant()
 
   // ── Settings ────────────────────────────────────────────────────────────
   function clampZoom(z) { return Math.max(minZoom, Math.min(maxZoom, z)); }
+  function clampOffset(o) { return Math.round(Math.max(minOffset, Math.min(maxOffset, o))); }
 
   function zoomLabel(z) { return z.toFixed(z < 10 ? 2 : 1).replace(/\.?0+$/, "") + "×"; }
   function setZoom(z) {
@@ -204,6 +228,7 @@ Item {
     if (p.shape === "square") root.round = false;
     else if (p.shape === "circle") root.round = true;
     if (typeof p.smooth === "boolean") root.smoothPixels = p.smooth;
+    if (isFinite(p.offset)) root.offset = clampOffset(Number(p.offset));
   }
   // A summon payload is a one-off: it changes the lens until it closes, and
   // is never saved. While one is in effect (`overridden`), hotkey changes are
@@ -227,7 +252,7 @@ Item {
   }
 
   // ── Saved settings ──────────────────────────────────────────────────────
-  readonly property var defaults: ({ zoom: 2.5, size: "medium", shape: "circle", smooth: false })
+  readonly property var defaults: ({ zoom: 2.5, size: "medium", shape: "circle", smooth: false, offset: 18 })
   // What's in settings.json. The settings window shows and edits this.
   property var saved: defaults
   property bool overridden: false
@@ -237,12 +262,13 @@ Item {
 
   function currentSettings() {
     return { zoom: root.zoom, size: root.sizes[root.sizeIndex].id,
-             shape: root.round ? "circle" : "square", smooth: root.smoothPixels };
+             shape: root.round ? "circle" : "square", smooth: root.smoothPixels,
+             offset: root.offset };
   }
   // Set one saved setting (from the settings window) and show it on the lens.
   function setSaved(key, value) {
     var next = Object.assign({}, root.saved);
-    next[key] = key === "zoom" ? clampZoom(value) : value;
+    next[key] = key === "zoom" ? clampZoom(value) : key === "offset" ? clampOffset(value) : value;
     root.saved = next;
     root.restoring = true;
     var one = {};
@@ -289,6 +315,7 @@ Item {
   onSizeIndexChanged: saveSettings()
   onRoundChanged: saveSettings()
   onSmoothPixelsChanged: saveSettings()
+  onOffsetChanged: saveSettings()
 
   LensSettings { id: settingsWindow; lens: root }
 
@@ -355,7 +382,7 @@ Item {
   function summon(payloadJson) { root.open(payloadJson || "{}"); }
   function hide() { root.dismiss(); }
 
-  Timer { id: closeTimer; interval: 190; onTriggered: root.finishClose() }
+  Timer { id: closeTimer; interval: 340; onTriggered: root.finishClose() }
 
   IpcHandler {
     target: "omalens"
@@ -395,7 +422,7 @@ Item {
   PanelWindow {
     id: panel
 
-    // Room around the lens for its shadow and the pop-in overshoot.
+    // Room around the lens for its shadow to fall on.
     readonly property int pad: 32
     readonly property int winW: Math.ceil(root.ds) + 2 * pad
     readonly property int winH: Math.ceil(root.ds) + 2 * pad
@@ -423,17 +450,31 @@ Item {
       y: root.lensY - panel.winY
       width: root.ds
       height: root.ds
-      opacity: Math.min(1, root.shownC * 1.4)
+      opacity: Math.min(1, root.shownC * 4)
 
+      // Opening: an accent dot appears at the rim nearest the pointer, grows to
+      // full size, then its stroke thins out to reveal the view. Closing runs
+      // the same steps backwards. `grow` and `open` overlap a little.
+      function phase(t, a, b) {
+        var x = Math.max(0, Math.min(1, (t - a) / (b - a)));
+        return x * x * (3 - 2 * x);
+      }
+      readonly property real grow: phase(root.shownC, 0, 0.6)
+      readonly property real open: phase(root.shownC, 0.35, 1)
+      readonly property real dotScale: Math.min(1, 14 / Math.max(1, width))
+
+      // Roundness as drawn: a square lens is still a round dot until it opens.
+      readonly property real rnd: Math.max(Math.max(0, Math.min(1, root.roundness)), 1 - open)
       readonly property real radius:
-        Style.cornerRadius + (width / 2 - Style.cornerRadius) * Math.max(0, Math.min(1, root.roundness))
+        Style.cornerRadius + (width / 2 - Style.cornerRadius) * rnd
 
-      // A small scale from the pointer's side — felt more than seen.
+      // Grow from the rim point nearest the pointer (where the tail sits), so
+      // the lens never reaches into the area it's magnifying.
       transform: Scale {
-        origin.x: root.cx - root.lensX
-        origin.y: root.cy - root.lensY
-        xScale: 0.9 + 0.1 * root.shown
-        yScale: 0.9 + 0.1 * root.shown
+        origin.x: lens.width / 2 + lens.rimDistance * Math.cos(lens.pointerAngle)
+        origin.y: lens.height / 2 + lens.rimDistance * Math.sin(lens.pointerAngle)
+        xScale: lens.dotScale + (1 - lens.dotScale) * lens.grow
+        yScale: lens.dotScale + (1 - lens.dotScale) * lens.grow
       }
 
       // Shadow: deepens as the lens lifts.
@@ -493,12 +534,13 @@ Item {
         }
       }
 
-      // Rim: accent ring.
+      // Rim: accent ring. While opening it starts thick enough to fill the
+      // lens (a solid dot) and thins down to 3 px.
       Rectangle {
         anchors.fill: parent
         radius: lens.radius
         color: "transparent"
-        border.width: 3
+        border.width: 3 + (width / 2 - 3) * (1 - lens.open)
         border.color: Color.accent
       }
 
@@ -509,10 +551,14 @@ Item {
       readonly property real rimDistance: {
         var c = Math.abs(Math.cos(pointerAngle)), s = Math.abs(Math.sin(pointerAngle));
         var square = (width / 2) / Math.max(c, s, 0.0001);
-        var t = Math.max(0, Math.min(1, root.roundness));
+        var t = lens.rnd;
         return square + (width / 2 - square) * t;
       }
+      // The tail is 14 px long; at smaller distances it shrinks to fit, so it
+      // never pokes into the magnified area.
       Item {
+        opacity: lens.open
+        scale: Math.max(0, Math.min(1, root.doff / 14))
         x: lens.width / 2 + lens.rimDistance * Math.cos(lens.pointerAngle)
         y: lens.height / 2 + lens.rimDistance * Math.sin(lens.pointerAngle)
         rotation: lens.pointerAngle * 180 / Math.PI
@@ -537,13 +583,13 @@ Item {
         anchors.centerIn: parent
         width: 1; height: 13
         color: Color.accent
-        opacity: 0.7
+        opacity: 0.7 * lens.open
       }
       Rectangle {
         anchors.centerIn: parent
         width: 13; height: 1
         color: Color.accent
-        opacity: 0.7
+        opacity: 0.7 * lens.open
       }
 
       // Zoom / size readout.

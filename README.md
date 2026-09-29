@@ -42,8 +42,8 @@ is never overwritten).
 `SUPER + SPACE` → **omaLens Settings** (or type `lens settings`), or run
 `omalens settings`. In the window you can:
 
-- set zoom (slider or 2× / 4× / 8× / 16× presets), size, shape, and smoothing,
-  with a live lens preview
+- set zoom (slider or 2× / 4× / 8× / 16× presets), distance from the pointer,
+  size, shape, and smoothing, with a live lens preview
 - reset everything to the defaults
 - see which lens actions Hyprland has bound right now, with their keys. For a
   missing one, it says whether the suggested combo is free or taken by something else.
@@ -57,7 +57,8 @@ is never overwritten).
 
 Everything works from the keyboard. `Tab` / `Shift + Tab` move between controls.
 On the zoom slider, `←` `→` `↑` `↓` (or `h` `j` `k` `l`) step the zoom, `Page Up` /
-`Page Down` double or halve it, and `Home` / `End` jump to the ends. In a button
+`Page Down` double or halve it, and `Home` / `End` jump to the ends. The distance
+slider works the same way, in 4 px steps (20 px with `Page Up` / `Page Down`). In a button
 group, `←` `→` pick a choice and `Enter` or `Space` selects it. `Esc` or a click
 outside the card closes the window.
 
@@ -130,7 +131,7 @@ different keys, unbind those instead, and keep the descriptions
 | `settings` | open or close the settings window   |
 
 The three sizes are small (300 px), medium (600 px), and large (900 px).
-Zoom, size, shape, and smoothing are saved to
+Zoom, distance, size, shape, and smoothing are saved to
 `~/.config/omarchy/jgarza.omalens/settings.json`, so they survive shell restarts.
 Changes from the key bindings and the settings window are both saved.
 
@@ -146,6 +147,7 @@ while it's open aren't saved either. Every field is optional:
 | `size`   | `"small"` / `"medium"` / `"large"` | `"medium"` |
 | `shape`  | `"circle"` / `"square"`       | `"circle"`   |
 | `smooth` | `true` / `false`              | `false` (sharp pixels) |
+| `offset` | `0`–`100` (px of space between the magnified area and the lens) | `18` |
 
 For example, a large square lens for inspecting pixels:
 
@@ -162,13 +164,17 @@ o.bind("SUPER + ALT + SHIFT + Z", "Pixel lens",
 - The lens sits below and to the right of the pointer. Near a screen edge it
   glides around the pointer to whichever side fits, and moves back once there's
   room again. It travels around the pointer rather than across it, so it never
-  covers the area it magnifies and never magnifies itself.
-- Opening and closing animate like lifting a glass off the screen and putting
-  it back. On open it springs up from 90% size, comes into focus from a blur,
-  its shadow deepens, and the magnification ramps up to the set zoom. Closing
-  is quicker and plays the same steps in reverse without the bounce. Every
-  animation, including zoom, size, shape, and the glide around the pointer, is
-  a spring, so it keeps its momentum if you change your mind mid-animation.
+  covers the area it magnifies and never magnifies itself. A round lens shows a
+  round patch, so it can sit closer to the pointer than a square one. The distance setting
+  adds space on top of that, so the lens can't be set close enough to
+  magnify itself.
+- Opening takes a third of a second. An accent dot appears on the side
+  nearest the pointer and grows to full size. Its ring then thins out to
+  reveal the view, which comes into focus from a blur while the magnification
+  ramps up to the set zoom. Closing plays the same steps in reverse, and
+  toggling mid-way reverses smoothly. Zoom, distance, size, shape, and the
+  glide around the pointer are springs, so they keep their momentum if you
+  change your mind mid-animation.
 - `bin/omalens-cursor` polls Hyprland for the pointer position about 60 times
   a second, and only while the lens is open.
 - The crosshair in the lens marks the pointer's spot.

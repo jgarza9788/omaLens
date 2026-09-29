@@ -5,7 +5,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 
-// omaLens settings window: adjust zoom, size, shape and smoothing (saved to
+// omaLens settings window: adjust zoom, distance, size, shape and smoothing (saved to
 // ~/.config/omarchy/jgarza.omalens/settings.json), preview the lens live, and
 // set up the key bindings in ~/.config/hypr/bindings.lua.
 //
@@ -16,7 +16,7 @@ Item {
 
   property var lens: null
   property bool opened: false
-  readonly property var saved: lens ? lens.saved : ({ zoom: 2.5, size: "medium", shape: "circle", smooth: false })
+  readonly property var saved: lens ? lens.saved : ({ zoom: 2.5, size: "medium", shape: "circle", smooth: false, offset: 18 })
 
   // Accent outline around a keyboard-focused control. The theme's own focus
   // styling is faint (buttons, toggle) or missing (the zoom slider).
@@ -238,7 +238,7 @@ Item {
 
       // Tab / Shift+Tab walk the controls. The platform's own Tab chain
       // doesn't reach them on a layer surface, so step through them here.
-      readonly property var focusRing: [lensToggle, zoomSlider, presetGroup, sizeGroup, shapeGroup,
+      readonly property var focusRing: [lensToggle, zoomSlider, presetGroup, offsetSlider, sizeGroup, shapeGroup,
         pixelGroup, resetBtn, copyBtn, addBtn, editBtn, closeBtn]
       function focusStep(dir) {
         var ring = focusRing, cur = -1;
@@ -395,6 +395,68 @@ Item {
                   onChanged: function (v) { root.setZoom(Number(v)); }
                 }
                 ChipRing { group: presetGroup }
+              }
+            }
+
+            // Distance: extra space between the magnified area and the lens.
+            Column {
+              width: parent.width
+              spacing: Style.spacing.md
+              Row {
+                width: parent.width
+                PanelSectionHeader { text: "DISTANCE"; width: parent.width - offsetText.width }
+                Text {
+                  id: offsetText
+                  text: Math.round(root.saved.offset) + " px"
+                  color: Color.foreground
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                }
+              }
+              PanelSlider {
+                id: offsetSlider
+                width: parent.width
+                minimum: root.lens ? root.lens.minOffset : 0
+                maximum: root.lens ? root.lens.maxOffset : 100
+                step: 4
+                value: root.saved.offset
+                trackColor: Style.selectedFillFor(Color.foreground, Color.accent)
+                fillColor: Color.accent
+                knobColor: Color.accent
+                onMoved: function (v) { root.lens.setSaved("offset", v); }
+
+                // Keyboard: arrows (or h/j/k/l) step 4 px, Page Up/Down 20 px,
+                // Home/End jump to the ends.
+                activeFocusOnTab: true
+                Keys.onPressed: function (event) {
+                  var o = root.saved.offset, t = event.text;
+                  switch (event.key) {
+                  case Qt.Key_Right: case Qt.Key_Up:     o += 4; break;
+                  case Qt.Key_Left:  case Qt.Key_Down:   o -= 4; break;
+                  case Qt.Key_PageUp:                    o += 20; break;
+                  case Qt.Key_PageDown:                  o -= 20; break;
+                  case Qt.Key_Home:                      o = root.lens.minOffset; break;
+                  case Qt.Key_End:                       o = root.lens.maxOffset; break;
+                  default:
+                    if (t === "l" || t === "k") o += 4;
+                    else if (t === "h" || t === "j") o -= 4;
+                    else return;
+                  }
+                  root.lens.setSaved("offset", o);
+                  event.accepted = true;
+                }
+
+                FocusRing { target: offsetSlider }
+              }
+              Text {
+                width: parent.width
+                wrapMode: Text.Wrap
+                color: Util.alpha(Color.foreground, 0.7)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.body
+                text: "Space between the magnified area and the lens. The lens always stays clear " +
+                      "of what it's magnifying, so it moves out further at low zoom and large sizes."
               }
             }
 
